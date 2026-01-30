@@ -15,8 +15,8 @@ echo "pip upgrading..."
 pip install --upgrade pip
 
 echo "🤖 Installing TensorFlow Lite Runtime..."
-# For Raspberry Pi 64-bit (recommended)
-pip install tflite-runtime==2.14.0
+# Try version-less install first, then common version, then full TF fallback
+pip install tflite-runtime || pip install tflite-runtime==2.11.0 || pip install tensorflow==2.15.0
 
 echo "📚 Installing Project Requirements..."
 pip install flask==2.3.3 numpy==1.26.4 requests==2.31.0 pillow==10.2.0 scikit-learn==1.3.2 google-generativeai==0.8.3
