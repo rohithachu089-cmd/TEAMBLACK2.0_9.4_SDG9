@@ -12,8 +12,8 @@ PORT = 8888
 
 app = Flask(__name__)
 genai.configure(api_key=GEMINI_API_KEY)
-# Use gemini-1.5-pro for vision
-model = genai.GenerativeModel('gemini-1.5-flash')
+# Use gemini-2.5-flash (verified available)
+model = genai.GenerativeModel('gemini-2.5-flash')
 
 # STATE
 state = {
