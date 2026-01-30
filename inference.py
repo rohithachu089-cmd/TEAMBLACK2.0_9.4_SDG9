@@ -74,35 +74,35 @@ class TFLiteEquipmentClassifier:
         output = output - np.max(output)
         exps = np.exp(output)
         probs_raw = exps / np.sum(exps)
-        probs = {self.labels[i]: float(probs_raw[i]) for i in range(len(self.labels))}
+        
+        # Ensure self.labels is a list and matches output length
+        if isinstance(self.labels, str):
+            self.labels = [s.strip() for s in self.labels.split(',')]
+            
+        probs = {self.labels[i]: float(probs_raw[i]) for i in range(min(len(self.labels), len(probs_raw)))}
 
         # 5. SMART SENSITIVITY LOGIC (v14)
-        # Find highest defect
         best_defect = "normal"
         defect_conf = 0
-        normal_conf = probs.get("normal", 0)
+        normal_conf = probs.get("normal", probs.get("Healthy", 0))
         
         for l, p in probs.items():
-            if l.lower() != 'normal' and p > defect_conf:
+            if l.lower() not in ['normal', 'healthy'] and p > defect_conf:
                 defect_conf = p
                 best_defect = l
         
         # Adaptive Thresholds
-        # 1. Defect is dominant (>40%)             -> FAULT
-        # 2. Defect is significant (>25%)          -> FAULT
-        # 3. Defect is visible (>15%) AND Normal is weak (<60%) -> FAULT
-        if defect_conf > 0.40:
-             final_label = best_defect
-             final_conf = defect_conf
-        elif defect_conf > 0.25:
-             final_label = best_defect
-             final_conf = defect_conf
-        elif defect_conf > 0.15 and normal_conf < 0.60:
+        if defect_conf > 0.25:
              final_label = best_defect
              final_conf = defect_conf
         else:
              final_label = "normal"
              final_conf = normal_conf
 
-        print(f"🧠 [v14] {final_label.upper()} ({final_conf:.2f}) | N:{normal_conf:.2f} D:{defect_conf:.2f}")
+        # User Style Logging
+        if final_label.lower() != "normal":
+            print(f"🚨 RISK DETECTED: {final_label.upper()} ({final_conf:.2f})")
+        else:
+            print(f"✅ SYSTEM NORMAL: {final_conf:.2f}")
+
         return final_label, probs

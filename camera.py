@@ -1,90 +1,72 @@
-import cv2
-import threading
-import time
-import numpy as np
+import cv2, threading, time, numpy as np, subprocess, os
 
 class CameraStream:
-    def __init__(self, src=0, resolution=(640, 480), fps=30):
-        self.src = src
-        self.resolution = resolution
-        self.fps = fps
-        self.stopped = False
-        self.frame = None
-        self.grabbed = False
-        self.stream = None
-        
-        # Initialize camera
+    def __init__(self, src=0, resolution=(640, 480), fps=24):
+        self.src, self.resolution, self.fps = src, resolution, fps
+        self.stopped, self.frame, self.grabbed, self.use_fallback = False, None, False, False
         self._init_camera()
 
     def _init_camera(self):
-        print(f"📹 [SYS] Initializing imaging array at source {self.src}...")
-        # On Pi, CAP_V4L2 is usually best
-        backends = [cv2.CAP_V4L2, cv2.CAP_DSHOW, cv2.CAP_ANY]
-        for backend in backends:
-            self.stream = cv2.VideoCapture(self.src, backend)
-            if self.stream.isOpened():
-                print(f"✅ [SYS] Sensor hooked via backend {backend}")
-                break
+        # Primary: libcamera/rpicam pipe (High Performance for Pi)
+        self.bin_path = "/usr/bin/rpicam-vid" if os.path.exists("/usr/bin/rpicam-vid") else "/usr/bin/libcamera-vid"
         
-        if self.stream.isOpened():
-            self.stream.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
-            self.stream.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
-            self.stream.set(cv2.CAP_PROP_FPS, self.fps)
-            self.stream.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            time.sleep(1.0) # Warmup
+        if os.path.exists(self.bin_path):
+            print(f"📸 Starting MJPEG Pipe: {self.bin_path}", flush=True)
+            cmd = [self.bin_path, "-t", "0", "--width", str(self.resolution[0]), 
+                   "--height", str(self.resolution[1]), "--framerate", str(self.fps), 
+                   "--codec", "mjpeg", "--nopreview", "-o", "-"]
+            try:
+                self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=10**6)
+                time.sleep(1)
+                if self.proc.poll() is None: return
+            except: pass
             
-            # Read first frame
-            self.grabbed, self.frame = self.stream.read()
-            if self.grabbed:
-                print("✅ Camera started successfully")
-            else:
-                print("⚠️ Camera opened but failed to read frame")
-        else:
-            print("❌ Failed to open camera")
+        self._init_fallback()
+
+    def _init_fallback(self):
+        print(f"💡 Switching to OpenCV VideoCapture({self.src})...", flush=True)
+        self.use_fallback = True
+        self.cap = cv2.VideoCapture(self.src)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
 
     def start(self):
-        """Start the thread to read frames from the video stream."""
-        if not self.stream or not self.stream.isOpened():
-            print("⚠️ Camera not ready, cannot start thread.")
-            return self
-            
-        t = threading.Thread(target=self.update, args=())
-        t.daemon = True
-        t.start()
+        threading.Thread(target=self.update, daemon=True).start()
         return self
 
     def update(self):
-        """Keep looping infinitely until the thread is stopped."""
-        while True:
-            if self.stopped:
-                self.stream.release()
-                return
-
-            if self.stream.isOpened():
-                grabbed, frame = self.stream.read()
-                if grabbed:
-                    self.grabbed = grabbed
-                    self.frame = frame
-                else:
-                    # If read fails, wait a bit and try again
-                    time.sleep(0.1)
+        while not self.stopped:
+            if self.use_fallback:
+                if self.cap and self.cap.isOpened():
+                    ret, frame = self.cap.read()
+                    if ret: self.frame, self.grabbed = frame, True
+                time.sleep(1/self.fps)
             else:
-                time.sleep(1.0) # Wait before retry if stream closed
+                self._update_pipe()
+
+    def _update_pipe(self):
+        stream_bytes = b""
+        while not self.stopped and not self.use_fallback:
+            try:
+                chunk = self.proc.stdout.read(16384)
+                if not chunk: break
+                stream_bytes += chunk
+                while True:
+                    a = stream_bytes.find(b'\xff\xd8')
+                    b = stream_bytes.find(b'\xff\xd9', a)
+                    if a != -1 and b != -1:
+                        jpg = stream_bytes[a:b+2]
+                        stream_bytes = stream_bytes[b+2:]
+                        frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
+                        if frame is not None: self.frame, self.grabbed = frame, True
+                    else: break
+            except: break
 
     def read(self):
-        """Return the most recent frame."""
-        if self.frame is not None:
-             return self.frame.copy() # Return copy to prevent race conditions
-        
-        # Return a mock frame if no frame is available
-        return self._get_mock_frame()
-
-    def _get_mock_frame(self):
-        img = np.zeros((self.resolution[1], self.resolution[0], 3), dtype=np.uint8)
-        cv2.putText(img, "No Camera Signal", (int(self.resolution[0]/4), int(self.resolution[1]/2)), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-        return img
+        if self.frame is not None: return self.frame.copy()
+        return np.zeros((self.resolution[1], self.resolution[0], 3), dtype=np.uint8)
 
     def stop(self):
-        """Indicate that the thread should be stopped."""
         self.stopped = True
+        if not self.use_fallback: self.proc.terminate()
+        else: self.cap.release()

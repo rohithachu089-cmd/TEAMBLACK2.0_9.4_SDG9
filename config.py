@@ -1,21 +1,19 @@
-# Configuration for Equipment Guard AI
-
-# === Gemini API (for AI Chatbot) ===
-GEMINI_API_KEY = "AIzaSyAegnoZWj22vanWah48rnvKDLcDuAxTMiM"
+# Configuration for Equipment Fixer
+GEMINI_API_KEY = "AIzaSyAXwwLmR0hR6RdBqEnKFWldVGTI0YVAA5Y"
 
 # === Model & Inference ===
 MODEL_DIR = "models"
 TFLITE_MODEL_PATH = f"{MODEL_DIR}/equipment_guard_int8.tflite"
 LABELS_PATH = f"{MODEL_DIR}/labels.txt"
 
-# MobileNetV2 default input size
-MODEL_INPUT_SIZE = (224, 224)  # (H, W)
-PREDICTION_SMOOTHING = 5       # Smooth out jitter
-PREDICTION_THRESHOLD = 0.65    # Threshold for equipment defects
-INFERENCE_FPS = 4              # Run N inferences per second
+# Standard Settings
+MODEL_INPUT_SIZE = (224, 224)
+PREDICTION_SMOOTHING = 5
+PREDICTION_THRESHOLD = 0.65
+INFERENCE_FPS = 4
 
 # === Camera ===
-CAMERA_FPS = 30                # Higher FPS for smoother stream
+CAMERA_FPS = 24
 CAMERA_RESOLUTION = (640, 480)
 
 # === UI ===
