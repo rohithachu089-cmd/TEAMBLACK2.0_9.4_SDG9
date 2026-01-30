@@ -1,78 +1,108 @@
-import time
 import numpy as np
 import cv2
-
+import os
 try:
-    # Preferred lightweight runtime on Raspberry Pi
     from tflite_runtime.interpreter import Interpreter
-except Exception:  # fallback to full TF if available
+except:
     from tensorflow.lite.python.interpreter import Interpreter
 
-
 class TFLiteEquipmentClassifier:
-    def __init__(self, model_path: str, labels: list[str], input_size=(224, 224)):
-        self.labels = labels
-        self.input_h, self.input_w = input_size
+    def __init__(self, model_path, labels_path):
+        # Load Labels
+        if os.path.exists(labels_path):
+            with open(labels_path, 'r') as f:
+                self.labels = [line.strip() for line in f.readlines() if line.strip()]
+        else:
+            self.labels = ['bearing_failure', 'connect_disconnection', 'normal', 'overheating']
+            
+        # Init Interpreter
         self.interpreter = Interpreter(model_path=model_path)
         self.interpreter.allocate_tensors()
-        self.input_details = self.interpreter.get_input_details()
-        self.output_details = self.interpreter.get_output_details()
-        self.input_is_quant = self.input_details[0]['dtype'] == np.uint8
-        self.input_scale, self.input_zero = self._get_scale_zero(self.input_details[0])
-        self.output_is_quant = self.output_details[0]['dtype'] == np.uint8
-        self.output_scale, self.output_zero = self._get_scale_zero(self.output_details[0])
-
-    def _get_scale_zero(self, detail):
-        quant = detail.get('quantization', None) or detail.get('quantization_parameters', None)
-        if quant and isinstance(quant, tuple):
-            scale, zero = quant
-            if isinstance(scale, (list, np.ndarray)):
-                scale = scale[0] if len(scale) else 1.0
-            if isinstance(zero, (list, np.ndarray)):
-                zero = zero[0] if len(zero) else 0
-            return float(scale or 1.0), int(zero or 0)
-        elif quant and 'scales' in quant:
-            scales = quant['scales']
-            zero_points = quant['zero_points']
-            scale = float(scales[0] if len(scales) else 1.0)
-            zero = int(zero_points[0] if len(zero_points) else 0)
-            return scale, zero
-        return 1.0, 0
-
-    def _preprocess(self, frame_bgr: np.ndarray) -> np.ndarray:
-        img = cv2.resize(frame_bgr, (self.input_w, self.input_h))
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        if self.input_is_quant:
-            # Assume input expects 0..255 uint8
-            tensor = img.astype(np.uint8)
-            if self.input_scale != 1.0 or self.input_zero != 0:
-                # map float [0,1] to quant domain if required (rare for uint8 inputs)
-                tensor = (img.astype(np.float32) / 255.0 / self.input_scale + self.input_zero).round().astype(np.uint8)
-        else:
-            # float32 0..1
-            tensor = img.astype(np.float32) / 255.0
-        tensor = np.expand_dims(tensor, axis=0)
-        return tensor
-
-    def predict(self, frame_bgr: np.ndarray, threshold: float = None):
-        input_tensor = self._preprocess(frame_bgr)
-        self.interpreter.set_tensor(self.input_details[0]['index'], input_tensor)
-        self.interpreter.invoke()
-        output = self.interpreter.get_tensor(self.output_details[0]['index'])
-        if self.output_is_quant:
-            output = (output.astype(np.float32) - self.output_zero) * self.output_scale
-        probs = output[0]
-        # Softmax normalization safeguard
-        if probs.ndim == 1:
-            # Some models may output logits
-            exps = np.exp(probs - np.max(probs))
-            probs = exps / np.sum(exps)
-        probs = probs.astype(np.float32)
-        label_probs = {self.labels[i]: float(probs[i]) for i in range(min(len(self.labels), len(probs)))}
-        best_idx = int(np.argmax(probs))
-        best_label = self.labels[best_idx]
-        best_conf = float(probs[best_idx])
+        self.in_det = self.interpreter.get_input_details()[0]
+        self.out_det = self.interpreter.get_output_details()[0]
         
-        if best_label != "Normal" and best_label != "unknown":
-            print(f"🚨 RISK DETECTED: {best_label} ({best_conf:.2f})")
-        return best_label, label_probs
+        self.h, self.w = self.in_det['shape'][1], self.in_det['shape'][2]
+        self.dtype = self.in_det['dtype']
+        
+        # Quantization Params
+        q = self.in_det.get('quantization_parameters', {})
+        self.in_scale = q.get('scales', [0.0])[0] if q.get('scales') else 0.0
+        self.in_zp = q.get('zero_points', [0])[0] if q.get('zero_points') else 0
+        
+        print(f"✅ [CORE] v14.0 RECONSTRUCTED | {self.dtype} | Scale:{self.in_scale} ZP:{self.in_zp}")
+
+    def predict(self, frame):
+        if frame is None: return "error", {}
+            
+        # 1. Strict Resizing
+        img = cv2.resize(frame, (224, 224)) # Force 224x224
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        
+        # 2. Input Preparation
+        if self.dtype == np.uint8:
+            # Standard Quantized Input: 0-255
+            input_data = np.expand_dims(img.astype(np.uint8), axis=0)
+            # If Model defines Scale/ZP, apply reverse mapping? 
+            # Usually for TFLite Image models, you pass the raw uint8 image matching typical training
+            # unless the metadata explicitly demands (val/scale)+zp.
+            # v14 Strategy: Direct Pass for maximum compatibility with standard TFLite export
+            # If this fails, we revert to manual quantization.
+            # Let's try the safest path: Manual Quantization if scale exists
+            if self.in_scale > 0:
+                 norm = img.astype(np.float32) / 255.0
+                 quant = (norm / self.in_scale) + self.in_zp
+                 input_data = np.expand_dims(np.clip(quant, 0, 255).astype(np.uint8), axis=0)
+        elif self.dtype == np.float32:
+             # Standard Float Input: 0-1
+             input_data = np.expand_dims(img.astype(np.float32) / 255.0, axis=0)
+        else:
+             input_data = np.expand_dims(img, axis=0) # Fallback
+        
+        # 3. Invoke
+        self.interpreter.set_tensor(self.in_det['index'], input_data)
+        self.interpreter.invoke()
+        output = self.interpreter.get_tensor(self.out_det['index'])[0]
+        
+        # 4. Process Output
+        # Dequantize if needed
+        oq = self.out_det.get('quantization_parameters', {})
+        if oq.get('scales'):
+            output = (output.astype(np.float32) - oq['zero_points'][0]) * oq['scales'][0]
+            
+        # Softmax
+        output = output.astype(np.float32)
+        output = output - np.max(output)
+        exps = np.exp(output)
+        probs_raw = exps / np.sum(exps)
+        probs = {self.labels[i]: float(probs_raw[i]) for i in range(len(self.labels))}
+
+        # 5. SMART SENSITIVITY LOGIC (v14)
+        # Find highest defect
+        best_defect = "normal"
+        defect_conf = 0
+        normal_conf = probs.get("normal", 0)
+        
+        for l, p in probs.items():
+            if l.lower() != 'normal' and p > defect_conf:
+                defect_conf = p
+                best_defect = l
+        
+        # Adaptive Thresholds
+        # 1. Defect is dominant (>40%)             -> FAULT
+        # 2. Defect is significant (>25%)          -> FAULT
+        # 3. Defect is visible (>15%) AND Normal is weak (<60%) -> FAULT
+        if defect_conf > 0.40:
+             final_label = best_defect
+             final_conf = defect_conf
+        elif defect_conf > 0.25:
+             final_label = best_defect
+             final_conf = defect_conf
+        elif defect_conf > 0.15 and normal_conf < 0.60:
+             final_label = best_defect
+             final_conf = defect_conf
+        else:
+             final_label = "normal"
+             final_conf = normal_conf
+
+        print(f"🧠 [v14] {final_label.upper()} ({final_conf:.2f}) | N:{normal_conf:.2f} D:{defect_conf:.2f}")
+        return final_label, probs

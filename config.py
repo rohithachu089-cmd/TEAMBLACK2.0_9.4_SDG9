@@ -1,7 +1,7 @@
 # Configuration for Equipment Guard AI
 
 # === Gemini API (for AI Chatbot) ===
-GEMINI_API_KEY = "AIzaSyCmTdqx3wDViciroJDszH-mOs_IKpgljRQ"
+GEMINI_API_KEY = "AIzaSyAegnoZWj22vanWah48rnvKDLcDuAxTMiM"
 
 # === Model & Inference ===
 MODEL_DIR = "models"

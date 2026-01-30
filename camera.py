@@ -17,13 +17,21 @@ class CameraStream:
         self._init_camera()
 
     def _init_camera(self):
-        print(f"📹 Initializing camera at index {self.src}...")
-        self.stream = cv2.VideoCapture(self.src)
+        print(f"📹 [SYS] Initializing imaging array at source {self.src}...")
+        # On Pi, CAP_V4L2 is usually best
+        backends = [cv2.CAP_V4L2, cv2.CAP_DSHOW, cv2.CAP_ANY]
+        for backend in backends:
+            self.stream = cv2.VideoCapture(self.src, backend)
+            if self.stream.isOpened():
+                print(f"✅ [SYS] Sensor hooked via backend {backend}")
+                break
+        
         if self.stream.isOpened():
             self.stream.set(cv2.CAP_PROP_FRAME_WIDTH, self.resolution[0])
             self.stream.set(cv2.CAP_PROP_FRAME_HEIGHT, self.resolution[1])
             self.stream.set(cv2.CAP_PROP_FPS, self.fps)
-            self.stream.set(cv2.CAP_PROP_BUFFERSIZE, 1) # Reduce latency
+            self.stream.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            time.sleep(1.0) # Warmup
             
             # Read first frame
             self.grabbed, self.frame = self.stream.read()
