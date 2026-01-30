@@ -1,0 +1,492 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plant Guard - Standalone Windows</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            background: linear-gradient(135deg, #0f1419 0%, #1a1f2b 50%, #0f1419 100%); 
+            color: #e8e8e8; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header { 
+            text-align: center; 
+            margin-bottom: 30px; 
+            padding: 25px; 
+            background: rgba(255,255,255,0.05); 
+            border-radius: 20px; 
+            border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+        }
+        h1 { 
+            font-size: 2.8em; 
+            background: linear-gradient(45deg, #00d4ff, #0099cc, #0077b6); 
+            -webkit-background-clip: text; 
+            -webkit-text-fill-color: transparent; 
+            margin-bottom: 10px;
+            text-shadow: 0 0 30px rgba(0,212,255,0.5);
+        }
+        .subtitle { 
+            color: #aaa; 
+            font-size: 1.2em; 
+            letter-spacing: 1px;
+        }
+        .video-section { 
+            text-align: center; 
+            margin: 30px 0; 
+            background: rgba(0,0,0,0.4); 
+            border-radius: 20px; 
+            padding: 25px; 
+            border: 2px solid #333;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .video-wrapper {
+            position: relative;
+            display: inline-block;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+        #video-stream { 
+            width: 100%; 
+            max-width: 800px; 
+            height: 600px; 
+            object-fit: cover; 
+            display: block;
+            transition: transform 0.3s ease;
+        }
+        .video-info { 
+            margin-top: 15px; 
+            color: #aaa; 
+            font-size: 14px;
+            text-align: center;
+        }
+        .fps-overlay {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(0,0,0,0.8);
+            color: #00ff00;
+            padding: 8px 15px;
+            border-radius: 25px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            z-index: 100;
+            border: 1px solid #00ff00;
+            box-shadow: 0 0 10px rgba(0,255,0,0.3);
+        }
+        .mirror-toggle { 
+            position: absolute; 
+            top: 15px; 
+            left: 15px; 
+            background: rgba(0,0,0,0.7); 
+            color: white; 
+            border: none; 
+            padding: 8px 12px; 
+            border-radius: 20px; 
+            cursor: pointer; 
+            z-index: 50;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        .mirror-toggle:hover { 
+            background: rgba(0,0,0,0.9); 
+            transform: scale(1.05);
+        }
+        .status-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); 
+            gap: 20px; 
+            margin: 30px 0; 
+        }
+        .status-card { 
+            background: rgba(255,255,255,0.05); 
+            padding: 25px; 
+            border-radius: 15px; 
+            text-align: center; 
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+        .status-card:hover { 
+            transform: translateY(-5px); 
+            box-shadow: 0 15px 35px rgba(0,0,0,0.3);
+            border-color: rgba(0,212,255,0.3);
+        }
+        .status-value { 
+            font-size: 2.8em; 
+            font-weight: bold; 
+            margin-bottom: 8px;
+        }
+        .status-healthy { color: #4CAF50; text-shadow: 0 0 10px rgba(76,175,80,0.5); }
+        .status-water { color: #2196F3; text-shadow: 0 0 10px rgba(33,150,243,0.5); }
+        .status-spray1 { color: #FF9800; text-shadow: 0 0 10px rgba(255,152,0,0.5); }
+        .status-spray2 { color: #F44336; text-shadow: 0 0 10px rgba(244,67,54,0.5); }
+        .status-auto { color: #9C27B0; text-shadow: 0 0 10px rgba(156,39,176,0.5); }
+        .status-label { 
+            color: #aaa; 
+            font-size: 0.9em; 
+            text-transform: uppercase; 
+            letter-spacing: 1px; 
+            margin-top: 5px;
+        }
+        .progress-bar {
+            height: 8px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.1);
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #2196F3, #42A5F5);
+            transition: width 0.3s ease;
+            border-radius: 4px;
+        }
+        .controls { 
+            text-align: center; 
+            margin: 40px 0; 
+            padding: 30px; 
+            background: rgba(0,0,0,0.3); 
+            border-radius: 20px; 
+            border: 2px solid #333;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .btn { 
+            background: linear-gradient(45deg, #667eea 0%, #764ba2 100%); 
+            color: white; 
+            border: none; 
+            padding: 15px 35px; 
+            margin: 10px; 
+            border-radius: 30px; 
+            cursor: pointer; 
+            font-size: 16px; 
+            font-weight: 600; 
+            transition: all 0.3s ease; 
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+            overflow: hidden;
+        }
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+        .btn:hover::before { left: 100%; }
+        .btn:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.4); }
+        .btn:active { transform: translateY(0); }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        .btn-success { background: linear-gradient(45deg, #4CAF50 0%, #45a049 100%); }
+        .btn-warning { background: linear-gradient(45deg, #FF9800 0%, #F57C00 100%); }
+        .btn-danger { background: linear-gradient(45deg, #F44336 0%, #D32F2F 100%); }
+        .btn-auto { background: linear-gradient(45deg, #9C27B0 0%, #7B1FA2 100%); }
+        @media (max-width: 768px) {
+            .container { padding: 10px; }
+            h1 { font-size: 2em; }
+            #video-stream { height: 300px !important; }
+            .status-grid { grid-template-columns: 1fr; }
+            .controls { padding: 15px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🌿 Plant Guard</h1>
+            <p class="subtitle">Real-time Plant Health Monitoring - Standalone Windows Edition</p>
+        </header>
+        
+        <!-- Video Section -->
+        <div class="video-section">
+            <div class="video-wrapper" style="position: relative;">
+                <button class="mirror-toggle" onclick="toggleMirror()" title="Toggle Mirror View">🔀</button>
+                <img id="video-stream" 
+                     src="/video_feed?_t={{ timestamp }}" 
+                     alt="Live Webcam Feed"
+                     style="width: 100%; max-width: 800px; height: 600px; object-fit: cover;">
+                <div class="fps-overlay" id="fps-display">Connecting...</div>
+            </div>
+            <div class="video-info">
+                📹 Live Webcam Feed | 640×480 @ {{ FPS }}fps | 
+                <span id="stream-status" style="color: #FF9800;">Connecting...</span>
+            </div>
+        </div>
+        
+        <!-- Status Grid -->
+        <div class="status-grid">
+            <div class="status-card">
+                <div class="status-value status-healthy" id="prediction-label">{{ last_prediction.label }}</div>
+                <div class="status-label">Current Diagnosis</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="confidence-bar" style="width: '{{ last_prediction.confidence|default(0) }}%';"></div>
+                </div>
+            </div>
+            <div class="status-card">
+                <div class="status-value status-water">{{ water_level }}%</div>
+                <div class="status-label">Reservoir Level</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: '{{ water_level|default(0) }}%'; background: linear-gradient(90deg, #2196F3, #42A5F5);"></div>
+                </div>
+            </div>
+            <div class="status-card">
+                <div class="status-value status-spray1" id="spray1-count">{{ counts.pump1 }}</div>
+                <div class="status-label">Powdery Treatments</div>
+            </div>
+            <div class="status-card">
+                <div class="status-value status-spray2" id="spray2-count">{{ counts.pump2 }}</div>
+                <div class="status-label">Rust Treatments</div>
+            </div>
+        </div>
+        
+        <!-- Controls -->
+        <div class="controls">
+            <h3 style="text-align: center; margin-bottom: 20px; color: #00d4ff;">🎮 Treatment Controls</h3>
+            <div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 15px;">
+                <button class="btn" onclick="refreshStream()">
+                    <i style="margin-right: 8px;">🔄</i>Refresh Stream
+                </button>
+                <button class="btn btn-auto" id="auto-btn" onclick="toggleAuto()">
+                    <i style="margin-right: 8px;">🤖</i>Auto Mode: {{ 'ON' if auto_enabled else 'OFF' }}
+                </button>
+                <button class="btn btn-warning" onclick="treatDisease(1)">
+                    <i style="margin-right: 8px;">🧪</i>Powdery Treatment
+                </button>
+                <button class="btn btn-danger" onclick="treatDisease(2)">
+                    <i style="margin-right: 8px;">🍂</i>Rust Treatment
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let frameCount = 0;
+        let lastTime = Date.now();
+        let isMirrored = true;
+    let autoMode = "{{ 'true' if auto_enabled else 'false' }}" === 'true';
+        let streamRetries = 0;
+        
+        // Elements
+        const video = document.getElementById('video-stream');
+        const fpsDisplay = document.getElementById('fps-display');
+        const predictionLabel = document.getElementById('prediction-label');
+        const confidenceBar = document.getElementById('confidence-bar');
+        const streamStatus = document.getElementById('stream-status');
+        const spray1Count = document.getElementById('spray1-count');
+        const spray2Count = document.getElementById('spray2-count');
+        const autoBtn = document.getElementById('auto-btn');
+        
+        // Stream handlers
+        video.onloadstart = function() {
+            streamStatus.textContent = 'Connecting...';
+            streamStatus.style.color = '#FF9800';
+            fpsDisplay.textContent = '---';
+            streamRetries = 0;
+        };
+        
+        video.onload = function() {
+            frameCount++;
+            const now = Date.now();
+            const elapsed = (now - lastTime) / 1000;
+            
+            if (elapsed > 1) {
+                const fps = frameCount / elapsed;
+                fpsDisplay.textContent = Math.round(fps);
+                frameCount = 0;
+                lastTime = now;
+            }
+            
+            streamStatus.textContent = '🟢 Live';
+            streamStatus.style.color = '#4CAF50';
+            
+            video.style.transform = isMirrored ? 'scaleX(-1)' : 'scaleX(1)';
+            streamRetries = 0;
+        };
+        
+        video.onerror = function(e) {
+            streamStatus.textContent = '🔴 Error';
+            streamStatus.style.color = '#F44336';
+            fpsDisplay.textContent = '---';
+            
+            streamRetries++;
+            if (streamRetries < 3) {
+                setTimeout(() => {
+                    video.src = '/video_feed?' + Date.now();
+                }, 2000);
+            }
+        };
+        
+        // Controls
+        function refreshStream() {
+            video.src = '/video_feed?' + Date.now();
+            streamStatus.textContent = '🔄 Refreshing...';
+            streamStatus.style.color = '#FF9800';
+        }
+        
+        function toggleMirror() {
+            isMirrored = !isMirrored;
+            video.style.transform = isMirrored ? 'scaleX(-1)' : 'scaleX(1)';
+        }
+        
+        async function toggleAuto() {
+            try {
+                autoMode = !autoMode;
+                const response = await fetch('/api/toggle_auto', { method: 'POST' });
+                if (response.ok) {
+                    autoBtn.innerHTML = autoMode ? 
+                        '<i style="margin-right: 8px;">🟢</i>Auto Mode: ON' : 
+                        '<i style="margin-right: 8px;">⚪</i>Auto Mode: OFF';
+                    autoBtn.className = autoMode ? 'btn btn-success' : 'btn btn-auto';
+                }
+            } catch (e) {
+                console.error('Auto toggle failed:', e);
+            }
+        }
+        
+        async function treatDisease(pump) {
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i style="margin-right: 8px;">⏳</i>Treating...';
+            
+            try {
+                const response = await fetch('/api/spray', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({pump: pump})
+                });
+                
+                const data = await response.json();
+                if (data.ok) {
+                    btn.innerHTML = '<i style="margin-right: 8px;">✅</i>Applied!';
+                    btn.style.background = '#4CAF50';
+                    
+                    // Update counter
+                    if (pump === 1) {
+                        const count = parseInt(spray1Count.textContent) + 1;
+                        spray1Count.textContent = count;
+                    } else {
+                        const count = parseInt(spray2Count.textContent) + 1;
+                        spray2Count.textContent = count;
+                    }
+                    
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                        btn.style.background = '';
+                    }, 2000);
+                } else {
+                    throw new Error(data.error || 'Unknown error');
+                }
+            } catch (e) {
+                console.error('Treatment failed:', e);
+                btn.innerHTML = '<i style="margin-right: 8px;">❌</i>Error';
+                btn.style.background = '#F44336';
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    btn.style.background = '';
+                }, 2000);
+            }
+        }
+        
+        // Status updates
+        async function updateStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                // Update prediction
+                if (data.last_prediction) {
+                    const label = data.last_prediction.label || 'healthy';
+                    const conf = Math.round((data.last_prediction.probs?.[label] || 1) * 100);
+                    
+                    predictionLabel.textContent = label.charAt(0).toUpperCase() + label.slice(1);
+                    confidenceBar.style.width = conf + '%';
+                    
+                    const colors = {'healthy': '#4CAF50', 'powdery': '#FF9800', 'rust': '#F44336'};
+                    predictionLabel.style.color = colors[label] || '#2196F3';
+                }
+                
+                // Update spray counts
+                spray1Count.textContent = data.pump1_count || 0;
+                spray2Count.textContent = data.pump2_count || 0;
+                
+            } catch (e) {
+                console.error('Status update failed:', e);
+            }
+        }
+        
+        // Auto-update
+        setInterval(updateStatus, 3000);
+        updateStatus();
+        
+        console.log('Plant Guard loaded!');
+    </script>
+</body>
+</html>
+    ''')
+
+@app.route('/video_feed')
+def video_feed():
+    print("[DEBUG] Video feed requested")
+    return Response(generate_stream(),
+                   mimetype='multipart/x-mixed-replace; boundary=frame',
+                   headers={'Cache-Control': 'no-cache'})
+
+@app.route('/api/status')
+def api_status():
+    return jsonify({
+        "water_level": water_level,
+        "pump1_count": spray_counts["pump1"],
+        "pump2_count": spray_counts["pump2"],
+        "last_prediction": current_prediction,
+        "auto_enabled": auto_mode,
+        "labels": labels,
+        "timestamp": time.time()
+    })
+
+@app.route('/api/toggle_auto', methods=['POST'])
+def toggle_auto():
+    global auto_mode
+    auto_mode = not auto_mode
+    print(f"[INFO] Auto mode: {'ON' if auto_mode else 'OFF'}")
+    return jsonify({"auto_enabled": auto_mode})
+
+@app.route('/api/spray', methods=['POST'])
+def spray():
+    data = request.get_json() or {}
+    pump = int(data.get('pump', 0))
+    if pump not in (1, 2):
+        return jsonify({"ok": False, "error": "Invalid pump"}), 400
+    
+    global spray_counts, water_level
+    spray_counts[f'pump{pump}'] += 1
+    water_level = max(0, water_level - 5)
+    print(f"[INFO] Treatment {pump} applied | Water: {water_level}%")
+    
+    return jsonify({"ok": True, "pump": pump})
+
+if __name__ == '__main__':
+    local_ip = socket.gethostbyname(socket.gethostname())
+    print(f"🌐 Local: http://localhost:{PORT}")
+    print(f"🌐 Network: http://{local_ip}:{PORT}")
+    print("🚀 Standalone mode - No Pi required!")
+    
+    try:
+        app.run(host=HOST, port=PORT, debug=True, threaded=True)
+    except KeyboardInterrupt:
+        camera.stop()
+        print("\n👋 Shutdown complete")

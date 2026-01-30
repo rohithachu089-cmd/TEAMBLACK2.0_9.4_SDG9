@@ -1,0 +1,4 @@
+bearing_failure
+connect_disconnection
+normal
+overheating

@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+*.log
+# dataset/  # Uncomment if you don't want to push images
