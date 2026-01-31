@@ -6,6 +6,9 @@ from camera import CameraStream
 from inference import TFLiteEquipmentClassifier
 
 app = Flask(__name__)
+# Cloud Deployment: Use Environment Variable for Port
+PORT = int(os.environ.get('PORT', APP_PORT))
+
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-2.5-flash')
 
@@ -238,4 +241,4 @@ def stream():
     return Response(g(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=APP_PORT, threaded=True)
+    app.run(host='0.0.0.0', port=PORT, threaded=True)
